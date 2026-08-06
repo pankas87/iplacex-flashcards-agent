@@ -1,0 +1,58 @@
+# ─────────────────────────────────────────────────────────────
+# Ironspec AI — artefactos de metodología (privados por ahora)
+#
+# La metodología en sí y todo el andamiaje de proceso que la
+# implementa NO se versionan en este repo público. El código y la
+# documentación técnica del proyecto (docs/technical/) SÍ se
+# versionan — ver nota abajo.
+# ─────────────────────────────────────────────────────────────
+CLAUDE.md
+docs/methodology/
+docs/adr/
+docs/spec-execs/
+docs/spec-bundle/
+docs/work_plans/
+docs/diagrams/
+docs/kaizen-log.yaml
+ironspec_tools/
+
+# docs/technical/ (TDD, environment.md) queda FUERA de este ignore
+# — es documentación del proyecto, no de la metodología. Cita
+# secciones de Ironspec por número sin exponer su contenido. Si
+# preferís mantenerlo privado también, agregá:
+# docs/technical/
+
+# ─────────────────────────────────────────────────────────────
+# Python
+# ─────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+
+# ─────────────────────────────────────────────────────────────
+# Entorno / secretos
+# ─────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ─────────────────────────────────────────────────────────────
+# Anki — datos/colecciones reales, nunca en el repo
+# ─────────────────────────────────────────────────────────────
+*.apkg
+*.colpkg
+*.anki2
+
+# ─────────────────────────────────────────────────────────────
+# Editor / SO
+# ─────────────────────────────────────────────────────────────
+.DS_Store
+.vscode/
+.idea/
