@@ -7,6 +7,15 @@
 
 **Estado:** shaping cerrado — pasa la Definition of Shapeable (§6.4, verificación al final de
 este documento).
+**Enmendado 2026-08-06 por [ADR-0002](../adr/0002-ejercicios-desde-fuentes-externas-curadas.md)**
+— §2.2, §2.5, §4.2, §4.5.2, §4.6 y §5.2 US-3 fueron revisados: el sub-pipeline práctico pasa de
+"generar todo por LLM" a "usar ejercicios de fuentes externas curadas, con generación por LLM
+como fallback". Las secciones afectadas lo señalan inline.
+**Enmendado 2026-08-07 por [ADR-0003](../adr/0003-jerarquia-de-fuentes-para-ejercicios-practicos.md)**
+— tras inspeccionar el material real, el sub-pipeline práctico pasa a una **jerarquía de tres
+niveles**: (1) ejercicios del material propio del curso, (2) fuentes externas curadas,
+(3) generación por LLM. ADR-0002 no se revierte: su mecanismo de curación externa sigue vigente,
+baja de nivel 1 a nivel 2.
 **Appetite:** 1 semana para el build inicial (§1.3, fase 1). La funcionalidad de corrección de
 cards (§2.6) tiene su propio appetite de semana 2 y está fuera de este documento salvo como
 idea general registrada.
@@ -53,6 +62,8 @@ el costo de poblarla a mano sobre seis semanas de material heterogéneo por mate
   reinterpretarlas por completo — quedan fuera de la generación automática.
 - Corrección de cards existentes vía agente conversacional — diferido a semana 2 (§2.6).
 - Cualquier materia más allá de las dos del bimestre actual.
+- Procesamiento de contenido embebido como figura (diagramas, capturas) más allá de
+  detectarlo y avisarlo — parking lot, ver §4.4.
 
 ---
 
@@ -73,18 +84,37 @@ están en discusión; se documentan como decisiones fijadas directamente en §4.
 reimportar `.apkg` a mano se paga una y otra vez con genanki. AnkiConnect lo elimina y además
 habilita dedup en el momento de la inserción, no como paso separado.
 
-### 2.2 Extracción de ejercicios existentes vs. generación de ejercicios nuevos por patrón
+### 2.2 Origen de los ejercicios prácticos
 
-| | Extracción | Generación por patrón |
-|---|---|---|
-| Fidelidad | Alta — la respuesta ya está validada en el material | Depende de que el agente resuelva/formule bien |
-| Cobertura | Limitada al set finito de ejercicios que ya existen | Superset amplio, sin techo natural del material original |
-| Matching fuente↔respuesta | Necesario y fue identificado como riesgo (archivos separados: `EJ_X.docx` vs `R_X.pdf`) | No aplica — no hay respuesta preexistente que parear |
+> **Historial de enmiendas.** La versión original evaluaba dos opciones (extraer del material
+> propio vs. generar por LLM) y elegía **generación**.
+> [ADR-0002](../adr/0002-ejercicios-desde-fuentes-externas-curadas.md) (2026-08-06) incorporó
+> una tercera — **fuentes externas curadas** — como vía primaria.
+> [ADR-0003](../adr/0003-jerarquia-de-fuentes-para-ejercicios-practicos.md) (2026-08-07), tras
+> inspeccionar el material real, **rehabilitó la extracción del material propio** y la puso en
+> primer lugar. El texto de abajo es la versión vigente.
 
-**Elegida: generación.** Interesa cobertura amplia del material, no solo el set de ejercicios
-que ya trae cada semana. Se pierde la garantía de fidelidad de una respuesta ya validada; se
-gana no estar limitado al volumen fijo de ejercicios existentes. Esto desplaza el riesgo
-principal de "matching frágil" a "alucinación en contenido generado" (ver §2.3).
+| | Material propio del curso | Fuentes externas curadas | Generación por LLM |
+|---|---|---|---|
+| Fidelidad del enunciado | Alta — redactado por el docente de la asignatura | Alta — redactado por un tercero con intención pedagógica | Depende de que el agente formule bien |
+| Fidelidad de la respuesta | **No se confía** — se recomputa en Python (§4.6) | **No se confía** — se recomputa en Python (§4.6) | **No se confía** — se recomputa en Python (§4.6) |
+| Calibración al examen real | **Máxima** — es el material que evalúa la asignatura | Media — buen ejercicio, pero no calibrado al criterio del curso | Media — sigue el patrón del material, sin validación docente |
+| Cobertura | Limitada al volumen de cada semana (y no todas traen `EJ_*.docx`) | Amplia — muchos sitios por tema | Superset amplio, sin techo natural |
+| Riesgo principal | Pareo enunciado↔clave posicional (mitigado: un desajuste se detecta, no se inserta) | Deriva de tema y fragilidad del scraping | Alucinación en el contenido generado (§2.3) |
+
+**Elegida: jerarquía de tres niveles** — material propio → externo curado → generación por LLM,
+en ese orden de preferencia por aprendizaje esperado, bajando de nivel solo cuando el anterior
+no rinde un ejercicio adecuado (detalle operativo en §4.5.2).
+
+El criterio que ordena la jerarquía es la **calibración al examen real**, que es el objetivo
+declarado del proyecto (§1.1, §1.3): los ejercicios del propio curso son los que mejor predicen
+cómo evalúa la asignatura. Los niveles 2 y 3 existen porque el nivel 1 tiene techo — no todas
+las semanas traen archivo de ejercicios (ej. Nivelación Matemática 3-6 no lo trae).
+
+En **los tres** niveles, la respuesta se recomputa de forma independiente en Python antes de
+insertar (§2.3, §4.6). Ni la clave `R_*.pdf` del curso ni la respuesta publicada por un sitio
+externo se toman como verdad — son insumo de contraste. Eso es lo que hace que sumar orígenes
+no sume clases de riesgo sobre el *resultado*: solo sobre la *selección* del ejercicio.
 
 ### 2.3 Verificación de contenido matemático generado: cómputo determinístico vs. confiar en el LLM
 
@@ -100,12 +130,18 @@ conceptual/V/F donde no hay cómputo determinístico posible sobre lenguaje.
 
 ### 2.4 Esquema de trazabilidad: tag único `#generado` vs. campos separados `fuente` + `verificado`
 
-Con el pivote de §2.2, prácticamente el 100% de las cards son generadas — un tag binario
-"generado sí/no" deja de discriminar nada útil.
+Ninguna card se transcribe literal del material del curso: o se genera, o se toma de una fuente
+externa y se normaliza. Un tag binario "generado sí/no" no discrimina nada útil en ese universo.
 
-**Elegida:** dos campos distintos — `fuente` (referencia a sección/página del material canónico
-del que salió el patrón o dato teórico; trazabilidad, no fidelidad literal) y `verificado` (tag,
-si la respuesta pasó verificación explícita antes de insertarse).
+**Elegida:** dos campos distintos — `fuente` (puntero de trazabilidad, no fidelidad literal) y
+`verificado` (tag, si la respuesta pasó verificación explícita antes de insertarse).
+
+> **Nota 2026-08-06 ([ADR-0002](../adr/0002-ejercicios-desde-fuentes-externas-curadas.md)).**
+> La redacción original de esta sección se apoyaba en que "prácticamente el 100% de las cards
+> son generadas", premisa que la enmienda vuelve falsa (ahora una parte viene de fuentes
+> externas). La **conclusión no cambia** — de hecho se refuerza: el origen de cada card
+> (externo vs. generado) ya queda discriminado por el propio `fuente`, que apunta a una URL o
+> al material canónico según el caso (§2.5). No hace falta un tag adicional para eso.
 
 ### 2.5 Fuente en el backside: puntero vs. cita textual
 
@@ -117,6 +153,23 @@ si la respuesta pasó verificación explícita antes de insertarse).
 
 **Elegida: puntero.** Además de ser más liviano de generar, el efecto de forzar volver al
 material original es deseado — refuerza el repaso en sí mismo, no es solo trazabilidad técnica.
+
+> **Enmienda 2026-08-06/07 ([ADR-0002](../adr/0002-ejercicios-desde-fuentes-externas-curadas.md),
+> [ADR-0003](../adr/0003-jerarquia-de-fuentes-para-ejercicios-practicos.md)) — `fuente` tiene
+> cuatro casos, no uno.** La decisión de "puntero, no cita" no cambia; lo que cambia es **a
+> dónde** apunta, según el origen de la card:
+>
+> | Origen de la card | `fuente` apunta a |
+> |---|---|
+> | Ejercicio del material propio (nivel 1, §4.5.2) | Archivo + n° de ejercicio (ej. `Mate - Semana 1 - EJ_1.1.docx, ej. 13`) |
+> | Ejercicio de fuente externa curada (nivel 2, §4.5.2) | La **URL** del ejercicio original |
+> | Ejercicio generado por LLM (nivel 3, §4.5.2) | Sección/página del material canónico |
+> | Card teórica / V-F (§4.5.1) | Sección/página del material canónico |
+>
+> En el caso de fuente externa se pierde el efecto de "volver al material propio" que motivó la
+> decisión original, y se gana atribución explícita del ejercicio de terceros — que es lo
+> correcto cuando el enunciado no es propio. En los otros tres casos el efecto original se
+> mantiene intacto. Sigue siendo puntero y no cita textual en todos los casos.
 
 ### 2.6 Corrección de cards existentes — parking lot / fuera de alcance en v1
 
@@ -151,7 +204,7 @@ personal, no concurrente.
 
 | Dolor | Cómo lo resuelve el pipeline | Prueba |
 |---|---|---|
-| Sin cobertura de todo el material antes del examen | Superset generado por aprendizaje esperado/subsección × nivel de dificultad, no limitado al set de ejercicios que ya existen | % de aprendizajes esperados de semana 1-2 con al menos N cards insertadas |
+| Sin cobertura de todo el material antes del examen | Superset por aprendizaje esperado/subsección × nivel de dificultad, alimentado por la jerarquía de tres niveles — material propio, fuentes externas curadas, generación por LLM (§4.5.2) — así ninguna subsección queda sin cards por falta de ejercicios en el material | % de aprendizajes esperados de semana 1-2 con al menos N cards insertadas |
 | Costo de poblar Anki a mano | Ingesta automática desde PDF/DOCX + inserción vía AnkiConnect | Tiempo de carga por semana de material < tiempo que tomaría cargar a mano |
 | Respuestas matemáticas generadas potencialmente erróneas | Tool de verificación determinística en Python antes de insertar | 100% de las cards con tag `verificado` tienen resultado confirmado por cómputo, no solo por el LLM |
 | Dificultad de validar contra el original al repasar | Campo `fuente` como puntero en el backside de cada card | Toda card insertada tiene `fuente` no vacío |
@@ -202,6 +255,8 @@ Agente construido sobre Claude Agent SDK, corriendo en WSL Ubuntu.
 
 **Tools:**
 - Lector de PDF/DOCX (ingesta de material fuente).
+- **Búsqueda web + fetch de páginas de ejercicios** — alimenta la curación de fuentes externas
+  y la recolección de ejercicios por tema (§4.5.2, [ADR-0002](../adr/0002-ejercicios-desde-fuentes-externas-curadas.md)).
 - Tool de verificación matemática — cómputo determinístico en Python (mcm, mcd, operatoria con
   enteros y fracciones) independiente del LLM.
 - Cliente AnkiConnect (`canAddNotes`, `addNotes`, `deckNames`, `version` para healthcheck).
@@ -211,6 +266,7 @@ Agente construido sobre Claude Agent SDK, corriendo en WSL Ubuntu.
 | Tarea | Modelo | Por qué |
 |---|---|---|
 | Clasificación de contenido (qué sabor es, qué tema/tag corresponde) | Ligero (Haiku) | Tarea acotada, respuesta estrecha |
+| Selección/normalización de ejercicio desde fuente externa (¿calza con el aprendizaje esperado? extraer enunciado limpio del HTML) | Ligero-balanceado | Tarea de juicio acotado sobre texto ya escrito, no de redacción original |
 | Generación de contenido pedagógico (enunciados, preguntas V/F, explicaciones) | Balanceado (Sonnet) | Requiere calidad de redacción y coherencia pedagógica |
 | Resolución matemática | No es el LLM — tool Python (§4.6) | El LLM no está diseñado para aritmética exacta |
 
@@ -247,6 +303,27 @@ Comandos previstos, a alto nivel:
 - **Fuera de alcance explícito de la clasificación:** actividades prácticas hands-on y pautas de
   autoevaluación tipo Likert (§1.4) — el clasificador las descarta, no las envía a generación.
 
+> **Parking lot 2026-08-07 — procesamiento de figuras, diferido, no la detección.** El riesgo
+> de arriba se evaluó con datos, no solo de la inspección de un documento (validación de
+> ADR-0003, Nivelación Matemática): el desarrollador, como estudiante real de Soporte SW-HW
+> semanas 1-2, confirma que las imágenes contienen contenido relevante en **casos puntuales**
+> (diagramas), pero el grueso de las explicaciones vive en el texto. La v1 **no construye**
+> render-a-imagen ni fallback de visión — es una pieza de arquitectura cara (toca §4.2, tabla
+> de modelos) para un riesgo acotado, no el caso general.
+>
+> **Comportamiento de v1:** `ingest/reader.py` ya captura `image_count` por página
+> (SPEC-1-IT2). Cuando una página de contenido (no portada/contratapa) tiene poco texto y
+> imágenes, se **detecta y se avisa** (`output.warn`), no se para el pipeline completo ni se
+> intenta OCR/visión — la página se procesa con el texto que tenga, aunque quede incompleta.
+> Esto no contradice "detener e informar" (`CLAUDE.md`): esa regla aplica cuando un **documento
+> entero** no produce texto extraíble limpio, no cuando una página puntual dentro de un
+> documento por lo demás legible tiene una figura.
+>
+> **Cuándo se retoma:** si el aviso de páginas figura-pesadas se vuelve frecuente al procesar
+> Soporte SW-HW semanas 3-6 (todavía no inspeccionadas), o si el estudiante nota huecos de
+> cobertura reales al repasar, es candidato a ADR — recién ahí, con evidencia de volumen, no
+> antes.
+
 ### 4.5 Generación de contenido — dos sub-pipelines
 
 **4.5.1 Teórico / teórico-práctico.** Toma el contenido de los PDF de material de estudio como
@@ -256,18 +333,83 @@ funciones relacionadas con la conectividad a internet"* → patrón de afirmaci�
 una definición). Genera un superset por **aprendizaje esperado / subsección** del material, con
 **3 niveles de dificultad × 5-8 cards por nivel**.
 
-**4.5.2 Práctico.** Genera enunciados nuevos siguiendo el patrón de los ejercicios existentes
-como ejemplo — no los extrae. Ejemplo de patrón tomado de Nivelación Matemática Semana 1 (el
-problema de "los viajeros" de mcm): enunciado con dos eventos periódicos que coinciden en el
-tiempo, pide encontrar cuándo vuelven a coincidir. El agente genera una variante nueva del mismo
-patrón (otros números, otro contexto narrativo) y resuelve él mismo el enunciado que genera.
+**4.5.2 Práctico.** *(Reescrita 2026-08-07 —
+[ADR-0003](../adr/0003-jerarquia-de-fuentes-para-ejercicios-practicos.md), que enmienda
+[ADR-0002](../adr/0002-ejercicios-desde-fuentes-externas-curadas.md).)* **Jerarquía de tres
+niveles** por aprendizaje esperado. Se intenta el nivel 1; solo si no rinde un ejercicio
+adecuado se baja al 2, y luego al 3. Todos terminan en la misma verificación.
+
+**Nivel 1 — Ejercicios del material propio del curso.** El material de cada semana puede traer
+un archivo de ejercicios (`EJ_*.docx`) con su clave de respuestas (`R_*.pdf`). Es la vía
+preferida: son los ejercicios que mejor predicen el examen real de la asignatura (§2.2).
+
+> **Detalle de implementación que el pareo debe respetar** (observado en el material real,
+> Nivelación Matemática Semana 1): los enunciados del DOCX son **párrafos planos sin
+> numeración textual** — la numeración es formato de Word, no caracteres extraíbles — mientras
+> que la clave del PDF **sí trae números explícitos** (`1.`, `2.`, `3.`…). El pareo
+> enunciado↔respuesta es por **posición**, no por número extraído del enunciado. Si el conteo
+> de enunciados y el de respuestas no coinciden, **detener e informar** (§7): no parear a
+> ciegas. El costo de un pareo silenciosamente corrido es una card con la respuesta de otro
+> ejercicio.
+
+**Nivel 2 — Fuentes externas curadas por tema.** Cuando el nivel 1 no cubre el aprendizaje
+esperado, o la semana no trae archivo de ejercicios (ej. Nivelación Matemática 3-6). Dos fases:
+
+- *Curación (una vez por tema, no por corrida).* Se arma una lista de sitios con ejercicios
+  buenos para cada tema (mcm, mcd, fracciones, …). Semilla: la **bibliografía que cada unidad
+  trae al final de su material** — punto de partida autorizado por la propia asignatura; el
+  material además **cita fuentes inline** a lo largo del texto, que sirven igual de semilla.
+  Desde ahí se amplía con búsqueda web. El resultado es un **artefacto durable** (lista curada
+  tema → fuentes), no un resultado de búsqueda efímero: hace las corridas repetibles y evita
+  scrapear sitios arbitrarios cada semana.
+- *Recolección y selección.* El agente trae candidatos desde las fuentes curadas del tema,
+  extrae el enunciado limpio del HTML, y descarta los que no calzan con el aprendizaje esperado
+  concreto (deriva de tema — riesgo de §2.2).
+
+> **Contrato abierto — dónde vive la lista curada y con qué formato.** No se fija en este
+> documento: se define en la SPEC-EXEC que implemente esta fase. Lo que sí queda fijado acá es
+> que **tiene que ser un artefacto durable y versionado**, no estado en memoria del agente.
+
+**Nivel 3 — Generación por LLM.** Si ninguno de los dos anteriores rinde un ejercicio adecuado,
+el agente genera uno nuevo siguiendo el patrón de los ejercicios del material: ejemplo de patrón
+de Nivelación Matemática Semana 1 (el problema de "los viajeros" de mcm) — enunciado con dos
+eventos periódicos que coinciden en el tiempo, pide cuándo vuelven a coincidir; el agente
+produce una variante nueva (otros números, otro contexto narrativo).
+
+**Verificación — común a los tres niveles.** La tool de Python resuelve el ejercicio de forma
+independiente (§4.6). Ni la clave `R_*.pdf` del curso ni la respuesta publicada por un sitio
+externo se usan como respuesta: son insumo de contraste. La que va a la card es siempre la de
+Python.
+
+**Riesgos nombrados de esta vía:**
+- **Pareo posicional en el nivel 1** — ver el detalle de implementación arriba. Mitigación: un
+  desajuste de conteo detiene e informa; y aunque el pareo fallara, la verificación por cómputo
+  produce un desacuerdo detectable en vez de una card incorrecta.
+- **Deriva de tema** — un ejercicio del sitio correcto puede igual no corresponder al
+  aprendizaje esperado específico. Mitigación: el paso de selección del nivel 2 es explícito,
+  no implícito.
+- **Fragilidad del scraping** — el HTML de cada sitio es distinto y puede cambiar. Mitigación
+  parcial: la lista curada es chica y conocida, no un scraper genérico de la web abierta.
+- **Envejecimiento de la lista curada** — un sitio puede caerse o cambiar. Se detecta al fallar
+  la recolección; la lista es un artefacto editable, no código.
+- **Atribución de ejercicios de terceros** — se resuelve con el campo `fuente` apuntando a la
+  URL de origen (§2.5) y con el uso estrictamente personal del sistema (no se redistribuye ni
+  se publica el mazo). Ver ADR-0002, "Consecuencias".
 
 ### 4.6 Verificación pre-inserción
 
-- **Contenido matemático:** el agente genera enunciado + solución candidata; la tool de cómputo
-  en Python resuelve el mismo problema de forma independiente; solo se inserta si ambos
-  resultados coinciden. Si no coinciden, se descarta y se regenera (no se inserta contenido sin
-  verificar).
+- **Contenido matemático** *(actualizado 2026-08-06,
+  [ADR-0002](../adr/0002-ejercicios-desde-fuentes-externas-curadas.md))*: la tool de cómputo
+  en Python es **la única autoridad sobre la respuesta**, sea cual sea el origen del enunciado:
+  - *Ejercicio de fuente externa:* la respuesta publicada por el sitio **no se confía**. Python
+    resuelve el enunciado de forma independiente. Si el sitio publica una respuesta y **no
+    coincide** con la de Python, se descarta el ejercicio entero (no se "corrige" ni se inserta
+    con la respuesta de Python): un desacuerdo indica que el enunciado se extrajo mal o que el
+    problema tiene condiciones que no se capturaron. Se pasa al siguiente candidato.
+  - *Ejercicio generado por LLM (fallback):* el agente produce enunciado + solución candidata;
+    Python resuelve el mismo problema; solo se inserta si coinciden. Si no, se descarta y se
+    regenera.
+  - En ningún caso se inserta contenido matemático sin que Python haya confirmado el resultado.
 - **Contenido conceptual/V/F:** no hay cómputo determinístico posible sobre lenguaje. Mitigación:
   grounding explícito — la afirmación generada y su valor de verdad se contrastan contra el
   pasaje específico del `fuente` referenciado, no se generan libremente.
@@ -296,9 +438,9 @@ en el ciclo de Claude Code.
 
 ### 5.1 Priorización — orden de corte para el appetite de 1 semana
 
-1. **US-1 a US-4** — setup + pipeline mínimo end-to-end en una sola materia/semana (Nivelación
-   Matemática, Semana 1), para validar el pipeline completo con el riesgo técnico más nuevo
-   (verificación matemática) antes de escalar.
+1. **US-1 a US-4** (incluyendo US-3b) — setup + pipeline mínimo end-to-end en una sola
+   materia/semana (Nivelación Matemática, Semana 1), para validar el pipeline completo con los
+   riesgos técnicos más nuevos (verificación matemática y sourcing externo) antes de escalar.
 2. **US-5 a US-7** — mismo pipeline aplicado a Soporte SW-HW Semana 1 (contenido conceptual/V/F,
    sin verificación por cómputo).
 3. **US-8 en adelante** — Semana 2 de ambas materias, repitiendo el pipeline ya validado.
@@ -306,6 +448,14 @@ en el ciclo de Claude Code.
 Si el appetite se agota antes de llegar al punto 3, el corte es: **Semana 2 se difiere**, no se
 recorta la verificación ni el dedup — esos son los que sostienen la confianza en el contenido
 insertado.
+
+> **Corte adicional 2026-08-06 ([ADR-0002](../adr/0002-ejercicios-desde-fuentes-externas-curadas.md)).**
+> El sourcing externo (US-3b + Fase A/B de §4.5.2) es la pieza más cara que agrega esta
+> enmienda, sobre un appetite de 1 semana que ya estaba comprometido. Si se come el appetite,
+> **el corte es apagar el sourcing externo y correr todo por el fallback de generación por
+> LLM** — que es el diseño original y ya está especificado. Lo que **no** se recorta sigue
+> siendo la verificación por cómputo ni el dedup. Este orden de corte es deliberado: la
+> degradación deja un sistema completo y funcional, no uno a medias.
 
 ### 5.2 User stories (Gherkin)
 
@@ -341,27 +491,75 @@ Feature: Clasificación de contenido fuente
     And el agente descarta cualquier actividad hands-on o pauta de autoevaluación si apareciera en esa sección
 ```
 
-**US-3 — Generación de ejercicio práctico nuevo con verificación matemática**
+**US-3 — Ejercicio práctico verificado, desde fuente externa o generado**
+*(Reescrita 2026-08-07 — [ADR-0003](../adr/0003-jerarquia-de-fuentes-para-ejercicios-practicos.md).)*
 ```gherkin
-Feature: Generación de ejercicios prácticos verificados
-  Scenario: El agente genera un ejercicio nuevo de m.c.m siguiendo el patrón identificado
-    Given el patrón de ejercicio de m.c.m fue identificado en US-2
-    When el agente genera un enunciado nuevo con el mismo patrón y una solución candidata
+Feature: Ejercicios prácticos verificados por cómputo
+  Scenario: Nivel 1 — el agente usa un ejercicio del material propio del curso
+    Given la semana trae un archivo de ejercicios "EJ_1.1.docx" y su clave "R_1.1.pdf"
+    And el aprendizaje esperado en curso es sobre m.c.m
+    When el agente extrae los enunciados del DOCX y las respuestas de la clave
+    And parea enunciado con respuesta por posición
+    And la tool de cómputo en Python resuelve el enunciado de forma independiente
+    Then si el cómputo coincide con la clave, la card se marca con el tag "verificado"
+    And el campo "fuente" indica el archivo y el número de ejercicio
+
+  Scenario: Nivel 1 — el conteo de enunciados y respuestas no coincide
+    Given un archivo de ejercicios y una clave con distinta cantidad de items
+    When el agente intenta parear por posición
+    Then el agente detiene el procesamiento de ese archivo e informa
+    And no parea a ciegas ni inserta cards de ese archivo
+
+  Scenario: Nivel 2 — la semana no trae ejercicios, se usa una fuente externa curada
+    Given la semana no trae archivo de ejercicios para el aprendizaje esperado
+    And existe una lista curada de fuentes para el tema "mcm" (US-3b)
+    When el agente recolecta un ejercicio candidato desde esas fuentes
+    And descarta los candidatos que no calzan con el aprendizaje esperado
+    And la tool de cómputo en Python resuelve el enunciado de forma independiente
+    Then la card se marca con el tag "verificado"
+    And el campo "fuente" contiene la URL del ejercicio original
+
+  Scenario: La respuesta de la fuente no coincide con el cómputo de Python
+    Given un ejercicio candidato cuya fuente publica su propia respuesta
+    And la fuente puede ser la clave del curso o un sitio externo
+    When la tool de cómputo en Python resuelve el enunciado y obtiene un resultado distinto
+    Then el ejercicio se descarta por completo
+    And no se inserta usando el resultado de Python como respuesta
+    And el agente pasa al siguiente candidato
+
+  Scenario: Nivel 3 — ningún nivel anterior rinde, fallback a generación por LLM
+    Given no hay ejercicio del material propio ni externo válido para el aprendizaje esperado
+    When el agente genera un enunciado nuevo siguiendo el patrón del material (US-2)
     And la tool de cómputo en Python resuelve el mismo enunciado de forma independiente
     Then si ambos resultados coinciden, la card se marca con el tag "verificado"
     And si no coinciden, la card se descarta y el agente genera un nuevo intento
+    And el campo "fuente" apunta a la sección del material canónico, no a una URL
+```
+
+**US-3b — Curación de fuentes externas por tema**
+```gherkin
+Feature: Lista curada de fuentes de ejercicios
+  Scenario: El agente arma la lista de fuentes para un tema nuevo
+    Given el material de la unidad trae una bibliografía al final
+    And el tema "mcm" todavía no tiene fuentes curadas
+    When el agente parte de esa bibliografía como semilla
+    And amplía con búsqueda web sitios con ejercicios del mismo tema
+    Then la lista curada queda guardada como artefacto durable y versionado
+    And las corridas siguientes reutilizan esa lista en vez de volver a buscar desde cero
 ```
 
 **US-4 — Inserción con dedup en Anki**
 ```gherkin
 Feature: Inserción de flashcards sin duplicados
   Scenario: El agente inserta una card verificada en el mazo correspondiente
-    Given una card de m.c.m fue generada y verificada (US-3)
+    Given una card de m.c.m fue obtenida y verificada (US-3, por cualquiera de sus dos vías)
     When el agente prepara la inserción
     Then el agente llama "canAddNotes" antes de insertar
     And si la card es un duplicado, no se inserta
     And si no lo es, se inserta en el deck "Nivelación Matemática::Semana 1" con el tag "mcm" y "verificado"
-    And el campo "fuente" contiene un puntero a la sección del material del que salió el patrón
+    And el campo "fuente" contiene un puntero no vacío, según el origen de la card (§2.5):
+        la URL del ejercicio si vino de una fuente externa curada, o la sección del material
+        canónico si fue generado por LLM
 ```
 
 **US-5 — Generación de superset teórico por aprendizaje esperado**
@@ -429,7 +627,11 @@ Feature: Loop de CLI con fallback a lenguaje natural
 - **¿Los riesgos técnicos principales están nombrados?** Sí: alucinación en contenido generado
   (mitigado en §2.3/§4.6 con verificación por cómputo y grounding), instalación del plugin
   AnkiConnect (§4.1), networking WSL↔Windows (§4.1), lectura correcta de PDF/DOCX incluyendo
-  contenido embebido como figuras (§4.4).
+  contenido embebido como figuras (§4.4). **Agregados por
+  [ADR-0002](../adr/0002-ejercicios-desde-fuentes-externas-curadas.md) (§4.5.2):** deriva de
+  tema en ejercicios externos, fragilidad del scraping, envejecimiento de la lista curada,
+  atribución de ejercicios de terceros, y presión sobre el appetite (con su regla de corte
+  explícita en §5.1).
 - **¿El documento se puede descomponer en SPEC-EXECs que pasen el test de arranque en frío
   (G5)?** Sí — cada user story de §5.2 especifica el Given/When/Then con referencias concretas a
   decisiones ya fijadas (taxonomía, mono-perfil), tools ya definidas (verificación Python,

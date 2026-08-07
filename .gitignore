@@ -51,6 +51,12 @@ build/
 *.anki2
 
 # ─────────────────────────────────────────────────────────────
+# Material fuente de IPLACEX (PDF/DOCX) — contenido de terceros,
+# no nuestro para redistribuir. Layout: material/<bimestre>/<asignatura>/<semana>/
+# ─────────────────────────────────────────────────────────────
+material/
+
+# ─────────────────────────────────────────────────────────────
 # Editor / SO
 # ─────────────────────────────────────────────────────────────
 .DS_Store
