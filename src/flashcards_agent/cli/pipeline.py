@@ -19,6 +19,7 @@ from typing import Literal
 from flashcards_agent import output
 from flashcards_agent.anki.client import AnkiConnectError, add_candidates, check_connection
 from flashcards_agent.classify.segmenter import segment
+from flashcards_agent.cli.commands import RunScope, describe_scope
 from flashcards_agent.generate.practice import level1_candidates
 from flashcards_agent.generate.theory import theory_candidates
 from flashcards_agent.ingest.exercises import (
@@ -72,6 +73,7 @@ class WeekReport:
     subject_slug: str
     week: int
     status: Literal["ok", "sin-conexion", "sin-material", "materia-desconocida", "error-insercion"]
+    scope: RunScope = "theory+practice"
     documents: int = 0
     theory_segments: int = 0
     skipped_segments: int = 0
@@ -90,31 +92,38 @@ class WeekReport:
     def not_inserted(self) -> int:
         return self.generated - self.inserted
 
+    @property
+    def practice_requested(self) -> bool:
+        return self.scope == "theory+practice"
+
 
 def process_week(
     subject_slug: str,
     week: int,
     root: Path = Path("material"),
     base_url: str | None = None,
+    *,
+    scope: RunScope = "theory+practice",
 ) -> WeekReport:
     if subject_slug not in known_subjects():
         output.err(f"materia desconocida: '{subject_slug}'")
-        return WeekReport(subject_slug=subject_slug, week=week, status="materia-desconocida")
+        return WeekReport(subject_slug=subject_slug, week=week, status="materia-desconocida", scope=scope)
 
     # 1. Healthcheck primero — TDD §4.1 escenario 2. Antes de leer material, antes de
     #    gastar un solo token.
     status = check_connection(base_url)
     if not status.ok:
         output.err(status.detail)
-        return WeekReport(subject_slug=subject_slug, week=week, status="sin-conexion")
+        return WeekReport(subject_slug=subject_slug, week=week, status="sin-conexion", scope=scope)
     output.info(f"AnkiConnect vivo (v{status.version})")
 
     # 2. Descubrir material de la semana.
     documents = discover_week(subject_slug, week, root=root)
     if not documents:
         output.warn(f"{subject_slug} semana {week}: sin material en {root} — nada que procesar")
-        return WeekReport(subject_slug=subject_slug, week=week, status="sin-material")
+        return WeekReport(subject_slug=subject_slug, week=week, status="sin-material", scope=scope)
     output.info(f"{len(documents)} documento(s) encontrados para {subject_slug} semana {week}")
+    output.info(f"alcance de la corrida: {describe_scope(scope)}")
 
     # 3. Teoría: segmentar cada doc kind="theory" y acumular segmentos por flavor.
     theory_segments = []
@@ -133,28 +142,33 @@ def process_week(
             else:
                 skipped_segments += 1
 
-    # 4. Práctico: agrupar y parear ejercicios por clave (puede haber más de un par por semana).
-    groups = group_exercise_documents(documents)
+    # 4. Práctico: solo si el alcance lo pide (IPL-32). Con "theory" no se agrupa, no se
+    #    parea, y NO se llama a level1_candidates — ni con tupla vacía.
+    groups: tuple[ExerciseGroup, ...] = ()
     pairs: list[ExercisePair] = []
     pairing_failures = 0
-    for group in groups:
-        statements = extract_exercise_statements(group.exercises.path)
-        answers = parse_answer_key(group.answer_key.pages)
-        try:
-            pairs.extend(pair_exercises(statements, answers, group.exercises.path.name))
-        except ExercisePairingError as exc:
-            output.warn(str(exc))
-            pairing_failures += 1
-            continue
+    if scope == "theory+practice":
+        groups = group_exercise_documents(documents)
+        for group in groups:
+            statements = extract_exercise_statements(group.exercises.path)
+            answers = parse_answer_key(group.answer_key.pages)
+            try:
+                pairs.extend(pair_exercises(statements, answers, group.exercises.path.name))
+            except ExercisePairingError as exc:
+                output.warn(str(exc))
+                pairing_failures += 1
+                continue
 
     # 5. Aviso de volumen antes de generar — informativo, sin gate de confirmación (v1 sin dry-run).
-    output.info(
-        f"a generar: {len(theory_segments)} segmento(s) teórico(s) x 3 niveles + "
-        f"{len(pairs)} ejercicio(s) — llamadas al modelo"
-    )
+    volume_msg = f"a generar: {len(theory_segments)} segmento(s) teórico(s) x 3 niveles"
+    if scope == "theory+practice":
+        volume_msg += f" + {len(pairs)} ejercicio(s)"
+    output.info(volume_msg + " — llamadas al modelo")
 
     theory_cards = theory_candidates(tuple(theory_segments), subject_slug, week)
-    practice_cards = level1_candidates(tuple(pairs), subject_slug, week)
+    practice_cards: tuple[CardCandidate, ...] = ()
+    if scope == "theory+practice":
+        practice_cards = level1_candidates(tuple(pairs), subject_slug, week)
 
     # 6. Insertar.
     candidates: tuple[CardCandidate, ...] = theory_cards + practice_cards
@@ -166,6 +180,7 @@ def process_week(
             subject_slug=subject_slug,
             week=week,
             status="error-insercion",
+            scope=scope,
             documents=len(documents),
             theory_segments=len(theory_segments),
             skipped_segments=skipped_segments,
@@ -181,6 +196,7 @@ def process_week(
         subject_slug=subject_slug,
         week=week,
         status="ok",
+        scope=scope,
         documents=len(documents),
         theory_segments=len(theory_segments),
         skipped_segments=skipped_segments,
@@ -195,9 +211,13 @@ def process_week(
     # 7. Resumen agregado — no duplica los avisos por ítem que ya emitieron los sub-módulos.
     output.info(f"documentos: {report.documents}")
     output.info(f"segmentos: {report.theory_segments} teóricos procesados, {report.skipped_segments} salteados (practice/discard)")
-    output.info(f"ejercicios: {report.exercise_groups} grupo(s) EJ/R, {report.pairing_failures} con conteo desparejo, {report.exercise_pairs} enunciado(s) pareados")
-    output.info(f"prácticos descartados antes de insertar: {report.exercise_pairs - report.practice_cards} (no traducibles o cómputo != clave, ver avisos arriba)")
-    output.info(f"generados: {report.theory_cards} teóricos + {report.practice_cards} prácticos = {report.generated}")
+    if report.practice_requested:
+        output.info(f"ejercicios: {report.exercise_groups} grupo(s) EJ/R, {report.pairing_failures} con conteo desparejo, {report.exercise_pairs} enunciado(s) pareados")
+        output.info(f"prácticos descartados antes de insertar: {report.exercise_pairs - report.practice_cards} (no traducibles o cómputo != clave, ver avisos arriba)")
+        output.info(f"generados: {report.theory_cards} teóricos + {report.practice_cards} prácticos = {report.generated}")
+    else:
+        output.info("ejercicios: omitidos — alcance 'solo teoría' (no se buscaron pares EJ_/R_ ni se generaron cards prácticas)")
+        output.info(f"generados: {report.theory_cards} teóricos (alcance: solo teoría)")
     output.ok(
         f"insertados {report.inserted}/{report.generated} en {deck_name(subject_slug, week)} "
         f"— {report.not_inserted} no insertados (duplicado/rechazo/no verificable, ver avisos)"

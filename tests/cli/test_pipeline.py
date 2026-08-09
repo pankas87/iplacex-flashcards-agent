@@ -317,6 +317,114 @@ def test_process_week_calls_collaborators_in_order():
 
 
 # ─────────────────────────────────────────────────────────────────────────
+# process_week — scope="theory" (IPL-32): la rama práctica se saltea por completo
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def test_process_week_theory_scope_never_calls_exercise_collaborators():
+    theory_doc = _doc("theory", "Nivelación Matemática - Semana 1.pdf")
+    ej_doc = _doc("exercises", "Mate - Semana 1 - EJ_1.1.docx")
+    r_doc = _doc("answer_key", "Mate - Semana 1 - R_1.1.pdf")
+
+    with (
+        patch(f"{_PATCH_ROOT}.check_connection", return_value=_OK_STATUS),
+        patch(f"{_PATCH_ROOT}.discover_week", return_value=[theory_doc, ej_doc, r_doc]),
+        patch(f"{_PATCH_ROOT}.segment", return_value=(_segment("theory"),)),
+        patch(f"{_PATCH_ROOT}.theory_candidates", return_value=(_theory_candidate(1),)),
+        patch(f"{_PATCH_ROOT}.group_exercise_documents") as mock_group,
+        patch(f"{_PATCH_ROOT}.pair_exercises") as mock_pair,
+        patch(f"{_PATCH_ROOT}.level1_candidates") as mock_practice,
+        patch(f"{_PATCH_ROOT}.add_candidates", return_value=(_theory_candidate(1),)),
+    ):
+        report = process_week("nivelacion-matematica", 1, scope="theory")
+
+    mock_group.assert_not_called()
+    mock_pair.assert_not_called()
+    mock_practice.assert_not_called()
+    assert report.scope == "theory"
+    assert report.practice_requested is False
+    assert report.exercise_groups == 0
+    assert report.pairing_failures == 0
+    assert report.exercise_pairs == 0
+    assert report.practice_cards == 0
+    assert report.theory_cards == 1
+
+
+def test_process_week_theory_scope_summary_omits_exercise_lines(capsys):
+    theory_doc = _doc("theory", "Nivelación Matemática - Semana 1.pdf")
+
+    with (
+        patch(f"{_PATCH_ROOT}.check_connection", return_value=_OK_STATUS),
+        patch(f"{_PATCH_ROOT}.discover_week", return_value=[theory_doc]),
+        patch(f"{_PATCH_ROOT}.segment", return_value=(_segment("theory"),)),
+        patch(f"{_PATCH_ROOT}.theory_candidates", return_value=(_theory_candidate(1),)),
+        patch(f"{_PATCH_ROOT}.add_candidates", return_value=(_theory_candidate(1),)),
+    ):
+        process_week("nivelacion-matematica", 1, scope="theory")
+
+    captured = capsys.readouterr().out
+    assert "ejercicios: omitidos" in captured
+    assert "grupo(s) EJ/R" not in captured
+    assert "prácticos descartados" not in captured
+
+
+def test_process_week_default_scope_matches_ipl31_behavior_exactly():
+    # Sin pasar scope, el comportamiento es idéntico a IPL-31 (default = "theory+practice").
+    theory_doc = _doc("theory", "Nivelación Matemática - Semana 1.pdf")
+
+    with (
+        patch(f"{_PATCH_ROOT}.check_connection", return_value=_OK_STATUS),
+        patch(f"{_PATCH_ROOT}.discover_week", return_value=[theory_doc]),
+        patch(f"{_PATCH_ROOT}.segment", return_value=(_segment("theory"),)),
+        patch(f"{_PATCH_ROOT}.theory_candidates", return_value=()),
+        patch(f"{_PATCH_ROOT}.level1_candidates", return_value=()) as mock_practice,
+        patch(f"{_PATCH_ROOT}.add_candidates", return_value=()),
+    ):
+        report = process_week("nivelacion-matematica", 1)
+
+    mock_practice.assert_called_once()
+    assert report.scope == "theory+practice"
+    assert report.practice_requested is True
+
+
+def test_process_week_all_five_statuses_propagate_scope():
+    with patch(f"{_PATCH_ROOT}.check_connection", return_value=_OK_STATUS):
+        assert process_week("algebra-lineal", 1, scope="theory").scope == "theory"
+
+    with patch(f"{_PATCH_ROOT}.check_connection", return_value=_DOWN_STATUS):
+        assert process_week("nivelacion-matematica", 1, scope="theory").scope == "theory"
+
+    with (
+        patch(f"{_PATCH_ROOT}.check_connection", return_value=_OK_STATUS),
+        patch(f"{_PATCH_ROOT}.discover_week", return_value=[]),
+    ):
+        assert process_week("nivelacion-matematica", 1, scope="theory").scope == "theory"
+
+    theory_doc = _doc("theory", "Nivelación Matemática - Semana 1.pdf")
+    with (
+        patch(f"{_PATCH_ROOT}.check_connection", return_value=_OK_STATUS),
+        patch(f"{_PATCH_ROOT}.discover_week", return_value=[theory_doc]),
+        patch(f"{_PATCH_ROOT}.segment", return_value=(_segment("theory"),)),
+        patch(f"{_PATCH_ROOT}.theory_candidates", return_value=(_theory_candidate(1),)),
+        patch(f"{_PATCH_ROOT}.add_candidates", side_effect=AnkiConnectError("boom")),
+    ):
+        report = process_week("nivelacion-matematica", 1, scope="theory")
+        assert report.status == "error-insercion"
+        assert report.scope == "theory"
+
+    with (
+        patch(f"{_PATCH_ROOT}.check_connection", return_value=_OK_STATUS),
+        patch(f"{_PATCH_ROOT}.discover_week", return_value=[theory_doc]),
+        patch(f"{_PATCH_ROOT}.segment", return_value=(_segment("theory"),)),
+        patch(f"{_PATCH_ROOT}.theory_candidates", return_value=(_theory_candidate(1),)),
+        patch(f"{_PATCH_ROOT}.add_candidates", return_value=(_theory_candidate(1),)),
+    ):
+        report = process_week("nivelacion-matematica", 1, scope="theory")
+        assert report.status == "ok"
+        assert report.scope == "theory"
+
+
+# ─────────────────────────────────────────────────────────────────────────
 # Material real — solo las capas sin LLM ni Anki (CLAUDE.md: skip accionable)
 # ─────────────────────────────────────────────────────────────────────────
 
@@ -352,3 +460,24 @@ def test_real_material_soporte_s1_pairing_failure_does_not_abort_week():
     assert report.status == "ok"
     assert report.pairing_failures == 1
     assert report.exercise_groups == 1
+
+
+@_requires_material
+def test_real_material_soporte_s1_theory_scope_has_no_pairing_failure(capsys):
+    # Motivación de IPL-32: con scope="theory" nunca se intenta el pareo, así que el
+    # desacuerdo real de conteo (5 vs 10) de Soporte S1 nunca se dispara — contraste directo
+    # con el test de arriba (scope por default -> pairing_failures==1).
+    with (
+        patch(f"{_PATCH_ROOT}.check_connection", return_value=_OK_STATUS),
+        patch(f"{_PATCH_ROOT}.segment", return_value=()),
+        patch(f"{_PATCH_ROOT}.theory_candidates", return_value=()),
+        patch(f"{_PATCH_ROOT}.add_candidates", return_value=()),
+    ):
+        report = process_week("soporte-sw-hw", 1, scope="theory")
+
+    assert report.status == "ok"
+    assert report.pairing_failures == 0
+    assert report.exercise_groups == 0
+    captured = capsys.readouterr().out
+    assert "conteo desparejo" not in captured
+    assert "enunciados vs" not in captured

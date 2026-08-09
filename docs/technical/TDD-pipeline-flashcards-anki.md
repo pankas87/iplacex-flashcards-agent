@@ -301,7 +301,14 @@ Comandos previstos, a alto nivel:
 > No es una decisión de arquitectura (este párrafo ya delega la gramática final a la
 > SPEC-EXEC) — se registra acá solo para que la próxima sesión no la reabra sin motivo.
 
-### 4.4 Ingesta y clasificación de contenido
+> **Sub-prompt de alcance agregado 2026-08-09 (IPL-32, SPEC-1-IT8-run-scope-prompt).** Tras un
+> comando `procesar` válido, y antes de correr el pipeline, el agente pregunta
+> interactivamente si el alcance de esa corrida es "solo teoría" o "teoría + ejercicios
+> prácticos" — determinístico, sin pasar por el modelo, mismo principio que el resto del
+> dispatch. Motivo: no tiene sentido generar ejercicios prácticos para Soporte SW-HW (sus
+> actividades son hands-on, §1.4, fuera de alcance; y el pareo EJ/R contra el material real
+> siempre falla — confirmado en IPL-31, 5 vs 10 y 7 vs 10). La decisión la toma el estudiante
+> en **cada** corrida — no se persiste por materia ni entre corridas (decisión explícita).
 
 - **Taxonomía `Materia::Unidad` *(decisión fijada)*.** Dos niveles fijos de mazo — ejemplo:
   `Nivelación Matemática::Semana 1`, `Soporte HW-SW::Unidad 1`. Sin tercer nivel de mazo para
