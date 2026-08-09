@@ -31,18 +31,36 @@ def read_docx(path: Path) -> tuple[str, ...]:
     return tuple(p.text.strip() for p in document.paragraphs if p.text.strip())
 
 
-def _classify_kind(filename: str) -> Literal["theory", "exercises", "answer_key"]:
+def _marker(filename: str) -> str:
     # Convención observada en el material real: "<Materia> - Semana N - EJ_x.ext" /
     # "... - R_x.ext" para ejercicios/clave; "<Materia> - Semana N.ext" (sin tercer
     # segmento) para teoría.
     stem = Path(filename).stem
     parts = stem.split(" - ")
-    marker = parts[-1] if len(parts) >= 3 else ""
+    return parts[-1] if len(parts) >= 3 else ""
+
+
+def _classify_kind(filename: str) -> Literal["theory", "exercises", "answer_key"]:
+    marker = _marker(filename)
     if marker.startswith("EJ_"):
         return "exercises"
     if marker.startswith("R_"):
         return "answer_key"
     return "theory"
+
+
+def exercise_key(filename: str) -> str:
+    """Clave de pareo EJ_x <-> R_x (IPL-31) — una semana puede traer más de un par.
+
+    "Mate - Semana 1 - EJ_1.1.docx" -> "1.1"; "Mate - Semana 1 - R_1.1.pdf" -> "1.1";
+    "Nivelación Matemática - Semana 1.pdf" (teoría, sin marcador) -> "".
+    """
+    marker = _marker(filename)
+    if marker.startswith("EJ_"):
+        return marker.removeprefix("EJ_")
+    if marker.startswith("R_"):
+        return marker.removeprefix("R_")
+    return ""
 
 
 def discover_week(

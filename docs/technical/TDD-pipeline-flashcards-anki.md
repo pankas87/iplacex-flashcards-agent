@@ -290,6 +290,17 @@ Comandos previstos, a alto nivel:
 - Listar materias/semanas disponibles.
 - Salir.
 
+> **Gramática v1 fijada 2026-08-09 (IPL-31, SPEC-1-IT7-cli-loop).** De los cuatro comandos
+> previstos, v1 implementa solo **procesar** (`"procesar <materia>, semana <N>"`, redacción
+> exacta del Gherkin de US-8), **salir** y **ayuda** (esta última a costo marginal cero: el
+> texto de ayuda ya existe para el camino de "comando no reconocido"). **Diferidos:**
+> "consultar estado" — exige un contrato nuevo (¿se consulta Anki vía `findNotes`, o se
+> persiste un run-log durable?) que no está decidido, amerita su propia card; "listar
+> materias/semanas" — la única necesidad real que cubriría (descubrir materias válidas) ya la
+> resuelve a costo cero el texto de ayuda. Ninguno de los dos lo ejercita el Gherkin de US-8.
+> No es una decisión de arquitectura (este párrafo ya delega la gramática final a la
+> SPEC-EXEC) — se registra acá solo para que la próxima sesión no la reabra sin motivo.
+
 ### 4.4 Ingesta y clasificación de contenido
 
 - **Taxonomía `Materia::Unidad` *(decisión fijada)*.** Dos niveles fijos de mazo — ejemplo:
