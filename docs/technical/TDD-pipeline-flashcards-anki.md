@@ -439,7 +439,9 @@ Python.
   canónico, §2.5) — no cita textual.
 - **Deck:** `Materia::Unidad` *(decisión fijada, §4.4)*.
 - **Tags:** tema específico (ej. `mcm`, `software-sistema`) + `verificado` cuando aplica (§2.4,
-  §4.6).
+  §4.6). Para cards teóricas del superset (§4.5.1, US-5), suma un tag `nivel-N` (`nivel-1` /
+  `nivel-2` / `nivel-3`) que identifica el nivel de dificultad — sigue siendo tag, no crea un
+  tercer nivel de mazo (§4.4 intacto). *(Aclaración 2026-08-09, IPL-30.)*
 
 ### 4.8 Dedup e inserción
 
@@ -466,18 +468,15 @@ Si el appetite se agota antes de llegar al punto 3, el corte es: **Semana 2 se d
 recorta la verificación ni el dedup — esos son los que sostienen la confianza en el contenido
 insertado.
 
-> **Hueco de cobertura señalado 2026-08-08 — Nivelación Matemática nunca recibe cards
-> teóricas en este roadmap tal como está escrito.** El punto 1 (US-1 a US-4) para Nivelación
-> Matemática cubre solo verificación + prácticos + inserción; el punto 2 (US-5 a US-7, único
-> lugar donde se especifica generación teórica/V-F) está redactado exclusivamente contra
-> Soporte SW-HW; y el punto 3 (US-8+) repite "el pipeline ya validado" para Semana 2 de ambas
-> materias, pero no cierra el hueco de Semana 1 de Nivelación Matemática. El sub-pipeline
-> teórico (§4.5.1) es agnóstico de materia — el hueco es de **secuenciación de user stories**,
-> no de arquitectura. **Pendiente:** cuando se implemente la capacidad de generación teórica
-> (US-5/US-6), extenderla también a Nivelación Matemática (ej. definiciones de m.c.m/m.c.d que
-> `classify/segmenter.py` ya segmenta como `flavor="theory"`) — no darla por cubierta solo con
-> los prácticos de US-3/US-4. No se agrega una user story nueva todavía porque no se ha
-> decidido el orden exacto; se registra acá para que no se pierda al planificar la Fase 2.
+> **Hueco de cobertura señalado 2026-08-08, resuelto 2026-08-08 — Nivelación Matemática
+> recibe cards teóricas desde la misma implementación de US-5/US-6.** El punto 2 (US-5 a US-7)
+> estaba redactado originalmente solo contra Soporte SW-HW. Decisión: US-5 y US-6 se
+> implementan de forma materia-agnóstica desde el inicio — cubren tanto Soporte SW-HW como
+> Nivelación Matemática (ej. definiciones de m.c.m/m.c.d que `classify/segmenter.py` ya
+> segmenta como `flavor="theory"`, IPL-26) en la misma pasada, no en una extensión futura. Los
+> Gherkin de §5.2 reflejan ambas materias explícitamente. No fue necesaria una ADR: el propio
+> sub-pipeline teórico (§4.5.1) ya era agnóstico de materia — esto era secuenciación de user
+> stories, no una decisión de arquitectura.
 
 > **Corte adicional 2026-08-06 ([ADR-0002](../adr/0002-ejercicios-desde-fuentes-externas-curadas.md)).**
 > El sourcing externo (US-3b + Fase A/B de §4.5.2) es la pieza más cara que agrega esta
@@ -592,24 +591,37 @@ Feature: Inserción de flashcards sin duplicados
         canónico si fue generado por LLM
 ```
 
-**US-5 — Generación de superset teórico por aprendizaje esperado**
+**US-5 — Generación de superset teórico por aprendizaje esperado (materia-agnóstica)**
 ```gherkin
-Feature: Cobertura amplia del contenido teórico
-  Scenario: El agente genera un superset de preguntas para un aprendizaje esperado de Soporte
+Feature: Cobertura amplia del contenido teórico, para cualquier materia con contenido segmentado como teórico
+  Scenario: El agente genera un superset de preguntas para un aprendizaje esperado de Soporte SW-HW
     Given el material de "Soporte SW-HW — Semana 1" tiene un aprendizaje esperado sobre clasificación de software
     When el agente procesa esa subsección
     Then el agente genera 3 niveles de dificultad
     And cada nivel contiene entre 5 y 8 cards
     And cada card queda clasificada en el deck "Soporte HW-SW::Semana 1"
+
+  Scenario: El agente genera un superset de preguntas para un aprendizaje esperado de Nivelación Matemática
+    Given el material de "Nivelación Matemática — Semana 1" tiene una subsección teórica sobre la definición de m.c.m (segmentada con flavor "theory" por classify/segmenter.py, IPL-26)
+    When el agente procesa esa subsección
+    Then el agente genera 3 niveles de dificultad
+    And cada nivel contiene entre 5 y 8 cards
+    And cada card queda clasificada en el deck "Nivelación Matemática::Semana 1"
 ```
 
-**US-6 — Generación de afirmación V/F siguiendo el patrón existente**
+**US-6 — Generación de afirmación V/F siguiendo el patrón existente (materia-agnóstica)**
 ```gherkin
-Feature: Generación de contenido V/F con grounding
-  Scenario: El agente genera una afirmación V/F nueva sobre software de sistema
+Feature: Generación de contenido V/F con grounding, para cualquier materia
+  Scenario: El agente genera una afirmación V/F nueva sobre software de sistema (Soporte SW-HW)
     Given el patrón de afirmaciones V/F de Soporte fue identificado (ej. "El software de sistema es responsable únicamente de...")
     And el contenido teórico fuente sobre software de sistema está disponible
     When el agente genera una afirmación nueva con el mismo patrón
+    Then el agente determina el valor de verdad contrastando la afirmación contra el pasaje específico del material fuente
+    And la card se marca "verificado" solo si esa contrastación fue explícita, no inferida libremente
+
+  Scenario: El agente genera una afirmación V/F nueva sobre una definición matemática (Nivelación Matemática)
+    Given el contenido teórico fuente sobre la definición de m.c.m está disponible (segmentado como flavor "theory")
+    When el agente genera una afirmación falsable siguiendo el mismo patrón (ej. "El m.c.m de dos números siempre es menor que su producto")
     Then el agente determina el valor de verdad contrastando la afirmación contra el pasaje específico del material fuente
     And la card se marca "verificado" solo si esa contrastación fue explícita, no inferida libremente
 ```
