@@ -18,7 +18,7 @@ from typing import Any
 import httpx
 
 from flashcards_agent import output
-from flashcards_agent.models.card import PracticeCardCandidate
+from flashcards_agent.models.card import CardCandidate
 
 _DEFAULT_URL = "http://localhost:8765"
 _TIMEOUT_SECONDS = 3.0
@@ -163,7 +163,7 @@ def ensure_note_type(base_url: str | None = None) -> None:
     )
 
 
-def _ensure_decks(candidates: tuple[PracticeCardCandidate, ...], base_url: str | None) -> None:
+def _ensure_decks(candidates: tuple[CardCandidate, ...], base_url: str | None) -> None:
     """Crea cada deck destino si no existe.
 
     addNotes NO autocrea el deck — verificado contra AnkiConnect real durante el smoke test
@@ -175,7 +175,7 @@ def _ensure_decks(candidates: tuple[PracticeCardCandidate, ...], base_url: str |
         _request("createDeck", {"deck": deck}, base_url=base_url)
 
 
-def _note_payload(candidate: PracticeCardCandidate) -> dict[str, Any]:
+def _note_payload(candidate: CardCandidate) -> dict[str, Any]:
     return {
         "deckName": candidate.deck,
         "modelName": _MODEL_NAME,
@@ -192,8 +192,8 @@ def _note_payload(candidate: PracticeCardCandidate) -> dict[str, Any]:
 
 
 def add_candidates(
-    candidates: tuple[PracticeCardCandidate, ...], base_url: str | None = None
-) -> tuple[PracticeCardCandidate, ...]:
+    candidates: tuple[CardCandidate, ...], base_url: str | None = None
+) -> tuple[CardCandidate, ...]:
     """Inserta candidatos verificados en Anki, con dedup y verificación post-inserción (TDD §4.8).
 
     canAddNotes antes de addNotes; un duplicado, un rechazo de addNotes, o un desacuerdo con
@@ -211,7 +211,7 @@ def add_candidates(
     notes = [_note_payload(candidate) for candidate in candidates]
     can_add = _request("canAddNotes", {"notes": notes}, base_url=base_url)
 
-    to_insert: list[tuple[PracticeCardCandidate, dict[str, Any]]] = []
+    to_insert: list[tuple[CardCandidate, dict[str, Any]]] = []
     for candidate, note, addable in zip(candidates, notes, can_add, strict=True):
         if addable:
             to_insert.append((candidate, note))
@@ -223,7 +223,7 @@ def add_candidates(
 
     note_ids = _request("addNotes", {"notes": [note for _, note in to_insert]}, base_url=base_url)
 
-    inserted: list[PracticeCardCandidate] = []
+    inserted: list[CardCandidate] = []
     inserted_ids: list[int] = []
     for (candidate, _), note_id in zip(to_insert, note_ids, strict=True):
         if note_id is None:
@@ -237,7 +237,7 @@ def add_candidates(
 
     infos = _request("notesInfo", {"notes": inserted_ids}, base_url=base_url)
 
-    verified: list[PracticeCardCandidate] = []
+    verified: list[CardCandidate] = []
     for candidate, note_id, info in zip(inserted, inserted_ids, infos, strict=True):
         if not info or info.get("noteId") != note_id:
             output.warn(f"{candidate.fuente}: inserción no verificable vía notesInfo")

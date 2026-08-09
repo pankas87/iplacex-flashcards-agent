@@ -331,13 +331,27 @@ fuente canónica y los patrones de formulación de pregunta que ya aparecen en e
 las afirmaciones V/F de Soporte: *"El software de sistema es responsable únicamente de las
 funciones relacionadas con la conectividad a internet"* → patrón de afirmación falsable sobre
 una definición). Genera un superset por **aprendizaje esperado / subsección** del material, con
-**3 niveles de dificultad × 5-8 cards por nivel**.
+**3 niveles de dificultad × un piso de referencia de 5-8 cards por nivel** *(revisado
+2026-08-09, IPL-30 — ver nota abajo)*.
 
 > **Aclaración de alcance 2026-08-08.** Este sub-pipeline es agnóstico de materia: aplica igual
 > a las definiciones/conceptos de Nivelación Matemática (ej. la definición de m.c.m/m.c.d que
 > `classify/segmenter.py` ya segmenta y tagea `flavor="theory"`, IPL-26) que al contenido
 > conceptual de Soporte SW-HW. **No implica que Nivelación Matemática se cubra solo con
 > ejercicios prácticos** — ver la nota en §5.1 sobre el hueco de cobertura actual en el roadmap.
+
+> **Revisión 2026-08-09 (IPL-30) — 5-8 es un piso, no un techo.** El shaping original fijó
+> 5-8 como rango cerrado. Al implementar, el desarrollador señaló que esto puede dejar
+> contenido del pasaje sin cubrir si hay más afirmaciones falsables y verificables que caben en
+> 8: truncar a un máximo fijo es priorizar un número redondo por sobre la cobertura real del
+> aprendizaje esperado. Decisión: 5-8 sigue siendo la referencia de cuánto generar como mínimo,
+> pero **no hay techo artificial** — si el pasaje da para más afirmaciones falsables y
+> verificables (grounding, TDD §4.6) por nivel, se generan y se conservan todas. La única poda
+> que se aplica sigue siendo la verificación (grounding) y el dedupe entre niveles del mismo
+> segmento, nunca un corte por cantidad. Nota separada, no resuelta acá: esto solo garantiza
+> que *lo que se procesa* no se trunca artificialmente — no garantiza que *todo el material* de
+> una semana/materia se procese; eso es responsabilidad de la orquestación de US-8/US-9
+> (`CLAUDE.md`, "Contratos en definición").
 
 > **Parking lot 2026-08-08 — cards de selección múltiple, fuera de alcance en v1.** v1 del
 > sub-pipeline teórico genera exclusivamente el patrón V/F (afirmación falsable, TDD original).

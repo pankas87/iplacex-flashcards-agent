@@ -15,20 +15,13 @@ from typing import Any
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
 from flashcards_agent import output
-from flashcards_agent.models.card import PracticeCardCandidate
+from flashcards_agent.models.card import PracticeCardCandidate, deck_name
 from flashcards_agent.models.content import ExercisePair
 from flashcards_agent.verify.answer_matching import matches
 from flashcards_agent.verify.executor import UnsupportedOperation, execute_plan
 from flashcards_agent.verify.plan import ComputePlan, ComputeStep, StepRef
 
 _MODEL = "sonnet"
-
-# Mapeo slug de carpeta -> nombre de materia (TDD §4.4, mapeo pendiente hasta que una card lo
-# necesitara — ésta es la primera).
-_DECK_NAMES: dict[str, str] = {
-    "nivelacion-matematica": "Nivelación Matemática",
-    "soporte-sw-hw": "Soporte HW-SW",
-}
 
 _OPERATIONS = ("mcm", "mcd", "add", "subtract", "multiply", "divide")
 
@@ -84,10 +77,6 @@ _TRANSLATION_SCHEMA: dict[str, Any] = {
     "required": ["translatable", "topic_tag", "steps"],
     "additionalProperties": False,
 }
-
-
-def deck_name(subject_slug: str, week: int) -> str:
-    return f"{_DECK_NAMES[subject_slug]}::Semana {week}"
 
 
 @dataclass(frozen=True)
