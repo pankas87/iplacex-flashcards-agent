@@ -333,6 +333,23 @@ funciones relacionadas con la conectividad a internet"* → patrón de afirmaci�
 una definición). Genera un superset por **aprendizaje esperado / subsección** del material, con
 **3 niveles de dificultad × 5-8 cards por nivel**.
 
+> **Aclaración de alcance 2026-08-08.** Este sub-pipeline es agnóstico de materia: aplica igual
+> a las definiciones/conceptos de Nivelación Matemática (ej. la definición de m.c.m/m.c.d que
+> `classify/segmenter.py` ya segmenta y tagea `flavor="theory"`, IPL-26) que al contenido
+> conceptual de Soporte SW-HW. **No implica que Nivelación Matemática se cubra solo con
+> ejercicios prácticos** — ver la nota en §5.1 sobre el hueco de cobertura actual en el roadmap.
+
+> **Parking lot 2026-08-08 — cards de selección múltiple, fuera de alcance en v1.** v1 del
+> sub-pipeline teórico genera exclusivamente el patrón V/F (afirmación falsable, TDD original).
+> Selección múltiple — con una única opción correcta o con más de una — es un patrón de
+> pregunta distinto: cambia el note type de Anki (campos de opciones + cuáles son correctas,
+> no un booleano), el prompt de generación (hay que producir distractores plausibles, no solo
+> una afirmación y su valor de verdad) y el grounding de verificación (contrastar cada opción
+> contra `fuente`, no solo una afirmación). No se implementa en v1 por appetite — es una
+> extensión real de superficie, no un ajuste menor a V/F. **Se retoma en una pasada futura**
+> (candidato natural: cuando se aborde la Fase 2 de generación teórica, §5.1) como una
+> ampliación explícita del note type y de `generate/` — no anticipar el diseño ahora.
+
 **4.5.2 Práctico.** *(Reescrita 2026-08-07 —
 [ADR-0003](../adr/0003-jerarquia-de-fuentes-para-ejercicios-practicos.md), que enmienda
 [ADR-0002](../adr/0002-ejercicios-desde-fuentes-externas-curadas.md).)* **Jerarquía de tres
@@ -448,6 +465,19 @@ en el ciclo de Claude Code.
 Si el appetite se agota antes de llegar al punto 3, el corte es: **Semana 2 se difiere**, no se
 recorta la verificación ni el dedup — esos son los que sostienen la confianza en el contenido
 insertado.
+
+> **Hueco de cobertura señalado 2026-08-08 — Nivelación Matemática nunca recibe cards
+> teóricas en este roadmap tal como está escrito.** El punto 1 (US-1 a US-4) para Nivelación
+> Matemática cubre solo verificación + prácticos + inserción; el punto 2 (US-5 a US-7, único
+> lugar donde se especifica generación teórica/V-F) está redactado exclusivamente contra
+> Soporte SW-HW; y el punto 3 (US-8+) repite "el pipeline ya validado" para Semana 2 de ambas
+> materias, pero no cierra el hueco de Semana 1 de Nivelación Matemática. El sub-pipeline
+> teórico (§4.5.1) es agnóstico de materia — el hueco es de **secuenciación de user stories**,
+> no de arquitectura. **Pendiente:** cuando se implemente la capacidad de generación teórica
+> (US-5/US-6), extenderla también a Nivelación Matemática (ej. definiciones de m.c.m/m.c.d que
+> `classify/segmenter.py` ya segmenta como `flavor="theory"`) — no darla por cubierta solo con
+> los prácticos de US-3/US-4. No se agrega una user story nueva todavía porque no se ha
+> decidido el orden exacto; se registra acá para que no se pierda al planificar la Fase 2.
 
 > **Corte adicional 2026-08-06 ([ADR-0002](../adr/0002-ejercicios-desde-fuentes-externas-curadas.md)).**
 > El sourcing externo (US-3b + Fase A/B de §4.5.2) es la pieza más cara que agrega esta
