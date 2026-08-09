@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from flashcards_agent.ingest.reader import discover_week, read_docx, read_pdf
+from flashcards_agent.ingest.reader import discover_week, exercise_key, read_docx, read_pdf
 
 _MATE_S1 = Path("material/2026-b3/nivelacion-matematica/semana-1")
 _THEORY_PDF = _MATE_S1 / "Nivelación Matemática - Semana 1.pdf"
@@ -58,3 +58,30 @@ def test_discover_week_returns_empty_for_unknown_week():
     documents = discover_week("nivelacion-matematica", 99)
 
     assert documents == []
+
+
+def test_discover_week_groups_two_exercise_pairs_in_mate_s1():
+    documents = discover_week("nivelacion-matematica", 1)
+
+    keys = sorted(exercise_key(doc.path.name) for doc in documents if doc.kind != "theory")
+    assert keys == ["1.1", "1.1", "1.2", "1.2"]
+
+
+def test_exercise_key_matches_across_exercises_and_answer_key():
+    assert (
+        exercise_key("Mate - Semana 1 - EJ_1.1.docx")
+        == exercise_key("Mate - Semana 1 - R_1.1.pdf")
+        == "1.1"
+    )
+
+
+def test_exercise_key_single_digit_marker():
+    assert (
+        exercise_key("Soporte - Semana 1 - EJ_1.docx")
+        == exercise_key("Soporte - Semana 1 - R_1.pdf")
+        == "1"
+    )
+
+
+def test_exercise_key_empty_for_theory_document():
+    assert exercise_key("Nivelación Matemática - Semana 1.pdf") == ""
