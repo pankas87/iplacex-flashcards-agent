@@ -227,6 +227,35 @@ def test_add_candidates_note_payload_uses_deck_scoped_dedup(mock_request):
 
 
 @patch("flashcards_agent.anki.client._request")
+def test_add_candidates_escapes_html_in_note_fields(mock_request):
+    # OQ-C (IPL-30): los campos de Anki se renderizan como HTML — un "<" o "&" sin escapar
+    # puede romper el layout o desaparecer. front/back/fuente se escapan en _note_payload.
+    candidate = PracticeCardCandidate(
+        front="El resultado es menor que 10 & mayor que 5",
+        back="<b>no debería renderizar como negrita</b>",
+        deck="Nivelación Matemática::Semana 1",
+        tags=("mcm", "verificado"),
+        fuente="EJ_1.1.docx, ej. 1",
+    )
+    mock_request.side_effect = [
+        ["Flashcards Agent"],
+        [123456],
+        [True],
+        [111],
+        [{"noteId": 111}],
+    ]
+
+    add_candidates((candidate,))
+
+    can_add_call = mock_request.call_args_list[2]
+    note = can_add_call.args[1]["notes"][0]
+    assert note["fields"]["Front"] == "El resultado es menor que 10 &amp; mayor que 5"
+    assert note["fields"]["Back"] == "&lt;b&gt;no debería renderizar como negrita&lt;/b&gt;"
+    assert "<" not in note["fields"]["Front"]
+    assert "<" not in note["fields"]["Back"]
+
+
+@patch("flashcards_agent.anki.client._request")
 def test_add_candidates_skips_duplicate_and_warns(mock_request, capsys):
     candidate = _candidate()
     mock_request.side_effect = [

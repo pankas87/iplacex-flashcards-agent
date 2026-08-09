@@ -197,6 +197,7 @@ def theory_candidates(
                 continue
 
             level_candidates: list[TheoryCardCandidate] = []
+            level_truth_values: list[bool] = []
             for stmt in statements:
                 result = check_grounding(stmt.statement, stmt.truth_value, stmt.evidence_quote, segment.body)
                 if not result.grounded:
@@ -215,10 +216,12 @@ def theory_candidates(
                 else:
                     output.warn(f"{segment.source_ref} (nivel {level}): topic_tag vacío")
 
+                truth_label = "Verdadero" if stmt.truth_value else "Falso"
+                level_truth_values.append(stmt.truth_value)
                 level_candidates.append(
                     TheoryCardCandidate(
                         front=_VF_PREFIX + stmt.statement,
-                        back="Verdadero" if stmt.truth_value else "Falso",
+                        back=f"{truth_label} — {stmt.explanation}",
                         deck=deck,
                         tags=tags,
                         fuente=segment.source_ref,
@@ -232,11 +235,12 @@ def theory_candidates(
                     f"candidatos sobrevivieron el grounding (mínimo esperado {_MIN_PER_LEVEL})"
                 )
 
-            if level_candidates and len({c.back for c in level_candidates}) == 1:
+            if level_truth_values and len(set(level_truth_values)) == 1:
+                uniform_label = "Verdadero" if level_truth_values[0] else "Falso"
                 output.warn(
                     f"{segment.source_ref} (nivel {level}): todas las afirmaciones "
-                    f"sobrevivientes son '{level_candidates[0].back}' — nivel pedagógicamente "
-                    "trivial, revisar en la pasada golden"
+                    f"sobrevivientes son '{uniform_label}' — nivel pedagógicamente trivial, "
+                    "revisar en la pasada golden"
                 )
 
             candidates.extend(level_candidates)

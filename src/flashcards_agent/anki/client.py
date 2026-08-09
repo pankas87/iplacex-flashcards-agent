@@ -11,6 +11,7 @@ cualquier otro valor cae a la colección completa.
 
 from __future__ import annotations
 
+import html
 import subprocess
 from dataclasses import dataclass
 from typing import Any
@@ -176,13 +177,17 @@ def _ensure_decks(candidates: tuple[CardCandidate, ...], base_url: str | None) -
 
 
 def _note_payload(candidate: CardCandidate) -> dict[str, Any]:
+    # Los campos de Anki se renderizan como HTML — escapar acá, en el único punto de entrada
+    # a AnkiConnect, cubre ambos tipos de candidato sin que generate/ tenga que preocuparse por
+    # HTML. No hay markup intencional en front/back/fuente hoy (OQ-C, IPL-30): si alguna vez se
+    # necesita, se agrega DESPUÉS de este escape, no antes.
     return {
         "deckName": candidate.deck,
         "modelName": _MODEL_NAME,
         "fields": {
-            "Front": candidate.front,
-            "Back": candidate.back,
-            "Fuente": candidate.fuente,
+            "Front": html.escape(candidate.front),
+            "Back": html.escape(candidate.back),
+            "Fuente": html.escape(candidate.fuente),
         },
         "tags": list(candidate.tags),
         # duplicateScope "deck" acota la detección de duplicados al mazo destino (TDD §4.8:

@@ -419,7 +419,7 @@ def test_theory_candidates_mcm_all_grounded_with_one_cross_level_duplicate():
         assert "verificado" in c.tags
         assert "mcm" in c.tags
         assert f"nivel-{c.level}" in c.tags
-        assert c.back in ("Verdadero", "Falso")
+        assert c.back.startswith("Verdadero — ") or c.back.startswith("Falso — ")
         assert c.front.startswith("¿Verdadero o falso? ")
 
 
@@ -630,9 +630,36 @@ def test_theory_candidates_warns_when_level_is_truth_value_uniform(capsys):
 
     level1 = [c for c in candidates if c.level == 1]
     assert len(level1) == 5
-    assert all(c.back == "Verdadero" for c in level1)
+    assert all(c.back.startswith("Verdadero — ") for c in level1)
     captured = capsys.readouterr()
     assert captured.out.count("nivel pedagógicamente trivial") == 3  # los 3 niveles son uniformes
+
+
+def test_theory_candidates_warns_uniform_even_with_different_explanations(capsys):
+    # El chequeo de "nivel uniforme" debe mirar truth_value, no el string `back` completo:
+    # back ahora incluye la explicación (OQ-B, IPL-30), que varía por afirmación aunque el
+    # valor de verdad sea el mismo — si el chequeo comparara `back` directamente, dejaría de
+    # detectar la uniformidad. Regression test para ese bug.
+    def _statements_for(level: int) -> list[dict]:
+        return [
+            {
+                "statement": f"Afirmación {i} sobre HTTP (nivel {level}).",
+                "truth_value": True,
+                "evidence_quote": "protocolo de comunicación sin estado",
+                "explanation": f"Explicación distinta número {i}.",
+            }
+            for i in range(5)
+        ]
+
+    levels = {level: _statements_for(level) for level in (1, 2, 3)}
+    mapping = _mapping_for(_SYNTH_SEGMENT, levels)
+    fake_query = _fake_query_for(mapping)
+
+    with patch("flashcards_agent.generate.theory.query", new=fake_query):
+        theory_candidates((_SYNTH_SEGMENT,), "soporte-sw-hw", 1)
+
+    captured = capsys.readouterr()
+    assert captured.out.count("nivel pedagógicamente trivial") == 3
 
 
 def test_generate_statements_raises_runtime_error_without_structured_output():
